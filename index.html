@@ -1,0 +1,558 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Cadence</title>
+<meta name="description" content="Pitch detection to live notation. The YIN algorithm turns a melody into notes, a piano roll and a written stave." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Karla:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+:root{
+  --paper:#f7f3e8; --card:#fffdf7; --rule:#ddd3bd; --rule2:#c4b699;
+  --ink:#171310; --sub:#5f574c; --faint:#938a7b;
+  --red:#b02a22; --gold:#b58b32; --blue:#2c4f7c;
+  --f:"Playfair Display",Georgia,serif;
+  --s:"Karla",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--paper);color:var(--ink);font-family:var(--s);font-size:14px;padding:0 20px 60px;-webkit-font-smoothing:antialiased;
+  background-image:repeating-linear-gradient(0deg,rgba(0,0,0,.016) 0 1px,transparent 1px 34px)}
+.wrap{max-width:1140px;margin:0 auto}
+header{padding:38px 0 20px;display:flex;align-items:flex-end;gap:26px;flex-wrap:wrap;border-bottom:2px solid var(--ink)}
+h1{font-family:var(--f);font-weight:400;font-size:52px;line-height:.92;margin:0;letter-spacing:-.02em}
+h1 em{font-style:italic;color:var(--red)}
+.sub{color:var(--sub);font-size:14px;line-height:1.6;max-width:50ch;margin:0 0 7px}
+.stamp{margin-left:auto;font-size:10.5px;letter-spacing:.24em;text-transform:uppercase;color:var(--red);
+  border:1px solid var(--red);padding:7px 13px;margin-bottom:7px}
+
+.bar{display:flex;gap:9px;align-items:center;flex-wrap:wrap;padding:15px 0;border-bottom:1px solid var(--rule)}
+button{font-family:var(--s);font-size:13px;font-weight:500;color:var(--ink);background:var(--card);border:1px solid var(--rule2);
+  padding:9px 15px;cursor:pointer;border-radius:2px}
+button:hover{background:#fff;border-color:var(--ink)}
+button.go{background:var(--ink);color:var(--paper);border-color:var(--ink);font-weight:600}
+button.go:hover{background:#31281f;color:var(--paper)}
+button.rec{background:var(--red);color:#fff;border-color:var(--red)}
+button[disabled]{opacity:.4;cursor:not-allowed}
+.status{margin-left:auto;font-size:12px;color:var(--faint);font-style:italic}
+
+.card{background:var(--card);border:1px solid var(--rule);margin-top:18px}
+.ch{padding:10px 16px;border-bottom:1px solid var(--rule);font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--faint);display:flex;justify-content:space-between;gap:12px}
+.ch b{color:var(--sub);font-weight:500;letter-spacing:.05em;text-transform:none;font-style:italic;font-family:var(--f)}
+.cb{padding:16px}
+canvas{display:block;width:100%}
+#stave{background:var(--card)}
+#roll{background:#fdfbf4;border:1px solid var(--rule)}
+#tuner{background:#fdfbf4;border:1px solid var(--rule)}
+
+.two{display:grid;grid-template-columns:1fr 306px;gap:18px;align-items:start}
+@media(max-width:920px){.two{grid-template-columns:1fr}h1{font-size:38px}}
+.read{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--rule)}
+.rd{padding:14px 16px;border-right:1px solid var(--rule)}
+.rd:last-child{border-right:0}
+.rd .k{font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--faint)}
+.rd .v{font-family:var(--f);font-size:30px;line-height:1;margin-top:7px}
+.rd .v small{font-size:14px;color:var(--sub);font-family:var(--s)}
+.ctl{margin-bottom:13px}
+.ctl label{display:flex;justify-content:space-between;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin-bottom:5px}
+.ctl label b{color:var(--red);font-weight:600;font-family:var(--f);font-size:14px}
+input[type=range]{width:100%;accent-color:var(--red);background:transparent}
+select{width:100%;font-family:var(--s);font-size:13px;padding:8px;border:1px solid var(--rule2);background:var(--card);border-radius:2px}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th,td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--rule)}
+th{font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);font-weight:500}
+td.n{font-family:var(--f);font-size:15px}
+td.c{color:var(--sub)}
+.notes{max-height:214px;overflow:auto}
+footer{color:var(--faint);font-size:12.5px;margin-top:26px;border-top:1px solid var(--rule2);padding-top:16px;line-height:1.8}
+footer a{color:var(--sub)}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div>
+    <h1>Ca<em>dence</em></h1>
+    <p class="sub" style="margin-top:12px">Pitch detection to written notation. The YIN algorithm follows a melody frame by frame, groups what it hears into notes, and sets them on a stave.</p>
+  </div>
+  <span class="stamp">Nothing uploaded</span>
+</header>
+
+<div class="bar">
+  <button class="go" id="play">Play the study</button>
+  <button id="mic">Use microphone</button>
+  <button id="pick">Open a file</button>
+  <input type="file" id="file" accept="audio/*" hidden />
+  <button id="clear">Clear</button>
+  <span class="status" id="status">ready</span>
+</div>
+
+<div class="two">
+  <div>
+    <div class="card" style="margin-top:18px">
+      <div class="ch"><span>Transcription</span><b id="t-note">—</b></div>
+      <div class="cb"><canvas id="stave" height="200"></canvas></div>
+      <div class="read">
+        <div class="rd"><div class="k">Heard</div><div class="v" id="r-note">—</div></div>
+        <div class="rd"><div class="k">Frequency</div><div class="v" id="r-hz">—<small> Hz</small></div></div>
+        <div class="rd"><div class="k">Confidence</div><div class="v" id="r-cf">—</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="ch"><span>Piano roll</span><b id="p-note">—</b></div>
+      <div class="cb"><canvas id="roll" height="210"></canvas></div>
+    </div>
+
+    <div class="card">
+      <div class="ch"><span>Tuning</span><b id="cents">—</b></div>
+      <div class="cb"><canvas id="tuner" height="76"></canvas></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card" style="margin-top:18px">
+      <div class="ch"><span>Detector</span></div>
+      <div class="cb">
+        <div class="ctl"><label>Threshold <b id="th-v">0.15</b></label><input type="range" id="th" min="0.05" max="0.4" step="0.01" value="0.15"></div>
+        <div class="ctl"><label>Gate <b id="g-v">-46 dB</b></label><input type="range" id="gate" min="-70" max="-20" step="1" value="-46"></div>
+        <div class="ctl"><label>Tempo <b id="bpm-v">96</b></label><input type="range" id="bpm" min="50" max="180" step="1" value="96"></div>
+        <div class="ctl" style="margin-bottom:0"><label>Quantise</label>
+          <select id="quant"><option value="0">off</option><option value="4">quarter</option><option value="8" selected>eighth</option><option value="16">sixteenth</option></select></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="ch"><span>Study</span></div>
+      <div class="cb"><select id="tune"></select>
+        <p style="font-size:12px;color:var(--sub);line-height:1.6;margin:11px 0 0">Each study is synthesised from a known list of notes, so what the detector writes can be checked against what was played.</p></div>
+    </div>
+    <div class="card">
+      <div class="ch"><span>Notes found</span><b id="n-count">0</b></div>
+      <div class="cb notes"><table id="ntable"><thead><tr><th>#</th><th>Note</th><th>Hz</th><th>Beats</th></tr></thead><tbody></tbody></table></div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  Built by <a href="https://bxzex.com">bxzex</a>. The YIN cumulative mean normalised difference function, parabolic interpolation, hysteresis note segmentation and a stave drawn on a canvas.
+  <a href="https://github.com/bxzex/cadence">Source on GitHub</a>.
+</footer>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+const midiToName = m => NAMES[((m%12)+12)%12] + (Math.floor(m/12)-1);
+const midiToHz = m => 440*Math.pow(2,(m-69)/12);
+const hzToMidi = f => 69 + 12*Math.log2(f/440);
+
+/* =====================================================================
+   YIN pitch detection.
+
+   Step 1: the squared difference function d(tau).
+   Step 2: the cumulative mean normalised difference, which is what stops
+           the detector locking onto tau = 0 and onto octave errors.
+   Step 3: the first tau under an absolute threshold that is also a local
+           minimum, then parabolic interpolation for sub-sample accuracy.
+   ===================================================================== */
+function yin(buf, sr, threshold){
+  const N = buf.length, half = N >> 1;
+  const d = new Float32Array(half);
+  for(let tau=1; tau<half; tau++){
+    let sum = 0;
+    for(let i=0;i<half;i++){ const diff = buf[i] - buf[i+tau]; sum += diff*diff; }
+    d[tau] = sum;
+  }
+  const cmnd = new Float32Array(half);
+  cmnd[0] = 1;
+  let running = 0;
+  for(let tau=1; tau<half; tau++){
+    running += d[tau];
+    cmnd[tau] = running === 0 ? 1 : d[tau]*tau/running;
+  }
+  const minTau = Math.floor(sr/1200), maxTau = Math.min(half-2, Math.floor(sr/60));
+  let tau = -1;
+  for(let t=minTau; t<maxTau; t++){
+    if(cmnd[t] < threshold){
+      while(t+1 < maxTau && cmnd[t+1] < cmnd[t]) t++;       // walk to the bottom of the dip
+      tau = t; break;
+    }
+  }
+  if(tau < 0){                                              // nothing under threshold: take the best dip anyway
+    let best = Infinity;
+    for(let t=minTau; t<maxTau; t++) if(cmnd[t] < best){ best = cmnd[t]; tau = t; }
+    if(tau < 0 || best > 0.6) return { hz:0, conf:0 };
+  }
+  // parabolic interpolation through the three samples around the minimum
+  let better = tau;
+  if(tau > 0 && tau < half-1){
+    const a = cmnd[tau-1], b = cmnd[tau], c = cmnd[tau+1];
+    const denom = 2*(2*b - a - c);
+    if(denom !== 0) better = tau + (c - a)/denom;
+  }
+  return { hz: sr/better, conf: Math.max(0, 1 - cmnd[tau]) };
+}
+
+/* ---------- analysis over a whole buffer ---------- */
+const WIN = 2048, HOP = 512;
+let frames = [], notes = [], sampleRate = 44100, duration = 0;
+
+function analyse(channel, sr){
+  sampleRate = sr;
+  duration = channel.length/sr;
+  const threshold = +$("th").value, gateDb = +$("gate").value;
+  const gate = Math.pow(10, gateDb/20);
+  frames = [];
+  for(let s=0; s+WIN <= channel.length; s += HOP){
+    const slice = channel.subarray(s, s+WIN);
+    let rms = 0;
+    for(let i=0;i<WIN;i++) rms += slice[i]*slice[i];
+    rms = Math.sqrt(rms/WIN);
+    if(rms < gate){ frames.push({ t:s/sr, hz:0, conf:0, rms }); continue; }
+    const { hz, conf } = yin(slice, sr, threshold);
+    frames.push({ t:s/sr, hz, conf, rms });
+  }
+  segment();
+}
+/* Hysteresis: a note starts when several frames agree on a pitch and ends
+   when several disagree, which keeps one bad frame from splitting a note. */
+function segment(){
+  notes = [];
+  let cur = null, missed = 0;
+  const MIN_FRAMES = 3;
+  const gate = Math.pow(10, (+$("gate").value)/20);
+  for(const f of frames){
+    const loud = f.rms >= gate;
+    const voiced = loud && f.hz > 0 && f.conf > 0.35;
+    const m = voiced ? Math.round(hzToMidi(f.hz)) : null;
+
+    if(cur && voiced && m === cur.midi){
+      // the same pitch played again is still a new note: a re-articulation
+      // shows up as the level dropping away and climbing back
+      if(cur.dipped && f.rms > cur.peak*0.45){
+        if(cur.frames >= MIN_FRAMES) notes.push(cur);
+        cur = { midi:m, start:f.t, end:f.t, frames:1, hzSum:f.hz, confSum:f.conf, peak:f.rms, dipped:false };
+      } else {
+        cur.end = f.t; cur.frames++; cur.hzSum += f.hz; cur.confSum += f.conf;
+        cur.peak = Math.max(cur.peak, f.rms);
+        if(f.rms < cur.peak*0.3) cur.dipped = true;
+      }
+      missed = 0;
+      continue;
+    }
+    if(cur && voiced && m !== cur.midi){          // a different pitch ends it at once
+      if(cur.frames >= MIN_FRAMES) notes.push(cur);
+      cur = { midi:m, start:f.t, end:f.t, frames:1, hzSum:f.hz, confSum:f.conf, peak:f.rms, dipped:false };
+      missed = 0;
+      continue;
+    }
+    if(cur && !voiced){
+      missed++;
+      if(!loud) cur.dipped = true;
+      if(missed > 2){
+        if(cur.frames >= MIN_FRAMES) notes.push(cur);
+        cur = null; missed = 0;
+      }
+      continue;
+    }
+    if(!cur && voiced) cur = { midi:m, start:f.t, end:f.t, frames:1, hzSum:f.hz, confSum:f.conf, peak:f.rms, dipped:false };
+  }
+  if(cur && cur.frames >= MIN_FRAMES) notes.push(cur);
+  notes.forEach(n => { n.hz = n.hzSum/n.frames; n.conf = n.confSum/n.frames; n.dur = Math.max(n.end-n.start, HOP/sampleRate); });
+  quantise();
+  draw();
+  renderTable();
+}
+function quantise(){
+  const div = +$("quant").value;
+  const bpm = +$("bpm").value;
+  const beat = 60/bpm;
+  notes.forEach(n => {
+    n.beats = n.dur/beat;
+    if(div){
+      const step = 4/div;                    // in beats: quarter = 1, eighth = 0.5
+      n.qBeats = Math.max(step, Math.round(n.beats/step)*step);
+      n.qStart = Math.round((n.start/beat)/step)*step;
+    } else { n.qBeats = n.beats; n.qStart = n.start/beat; }
+  });
+}
+
+/* ---------- drawing ---------- */
+function fit(c, h){
+  const d = window.devicePixelRatio||1, r = c.getBoundingClientRect();
+  c.width = Math.max(1,Math.round(r.width*d)); c.height = Math.round(h*d);
+  c.style.height = h+"px";
+  const x = c.getContext("2d");
+  x.setTransform(d,0,0,d,0,0);
+  return { x, W:r.width, H:h };
+}
+// where a note sits on a treble stave: diatonic steps above the bottom line (E4)
+const STEP_OF_PC = [0,0,1,1,2,3,3,4,4,5,5,6];
+const SHARP_PC = [false,true,false,true,false,false,true,false,true,false,true,false];
+function staffPos(midi){
+  const pc = ((midi%12)+12)%12, oct = Math.floor(midi/12)-1;
+  const diatonic = STEP_OF_PC[pc] + 7*oct;
+  const e4 = STEP_OF_PC[4] + 7*4;             // E4 is the bottom line
+  return { step: diatonic - e4, sharp: SHARP_PC[pc] };
+}
+function drawClef(x, cx, topY, lineGap){
+  // a G clef drawn by hand: the curl sits on the second line from the bottom
+  const g = lineGap, gy = topY + 3*g;         // the G4 line
+  x.save();
+  x.strokeStyle = "#171310"; x.lineWidth = g*0.19; x.lineCap = "round"; x.lineJoin = "round";
+  x.beginPath();
+  x.moveTo(cx + g*0.05, gy + g*2.6);
+  x.bezierCurveTo(cx + g*1.05, gy + g*2.0, cx + g*1.15, gy + g*0.6, cx + g*0.15, gy + g*0.35);
+  x.bezierCurveTo(cx - g*0.95, gy + g*0.15, cx - g*1.05, gy - g*1.1, cx + g*0.05, gy - g*1.5);
+  x.bezierCurveTo(cx + g*0.95, gy - g*1.85, cx + g*0.85, gy - g*3.2, cx + g*0.15, gy - g*3.3);
+  x.bezierCurveTo(cx - g*0.5, gy - g*3.35, cx - g*0.6, gy - g*2.4, cx - g*0.2, gy - g*1.2);
+  x.bezierCurveTo(cx + g*0.15, gy - g*0.1, cx + g*0.55, gy + g*1.6, cx + g*0.45, gy + g*3.3);
+  x.bezierCurveTo(cx + g*0.4, gy + g*4.2, cx - g*0.5, gy + g*4.3, cx - g*0.6, gy + g*3.6);
+  x.stroke();
+  x.beginPath(); x.arc(cx + g*0.12, gy, g*0.28, 0, 6.283); x.fillStyle = "#171310"; x.fill();
+  x.restore();
+}
+function drawStave(){
+  const { x, W, H } = fit($("stave"), 200);
+  x.fillStyle = "#fffdf7"; x.fillRect(0,0,W,H);
+  const gap = 11, topY = 58, left = 84, right = W - 20;
+  x.strokeStyle = "#171310"; x.lineWidth = 1;
+  for(let i=0;i<5;i++){
+    const y = topY + i*gap;
+    x.beginPath(); x.moveTo(30, y+0.5); x.lineTo(right, y+0.5); x.stroke();
+  }
+  drawClef(x, 48, topY, gap);
+  x.beginPath(); x.moveTo(right+0.5, topY); x.lineTo(right+0.5, topY+4*gap); x.stroke();
+
+  if(!notes.length){
+    x.fillStyle = "#938a7b"; x.font = "italic 14px 'Playfair Display', serif"; x.textAlign = "center";
+    x.fillText("play the study, or sing into the microphone", W/2, topY + 2*gap + 44);
+    return;
+  }
+  const n = Math.min(notes.length, 26);
+  const span = (right - left - 24)/Math.max(1,n);
+  for(let i=0;i<n;i++){
+    const note = notes[i];
+    const { step, sharp } = staffPos(note.midi);
+    const cx = left + span*i + span/2;
+    const cy = topY + 4*gap - step*(gap/2);
+    // ledger lines above and below the stave
+    x.strokeStyle = "#171310"; x.lineWidth = 1;
+    if(step < 0) for(let s=-2; s>=step; s-=2){ const y = topY + 4*gap - s*(gap/2); x.beginPath(); x.moveTo(cx-10,y+0.5); x.lineTo(cx+10,y+0.5); x.stroke(); }
+    if(step > 8) for(let s=10; s<=step; s+=2){ const y = topY + 4*gap - s*(gap/2); x.beginPath(); x.moveTo(cx-10,y+0.5); x.lineTo(cx+10,y+0.5); x.stroke(); }
+    // head
+    x.save(); x.translate(cx, cy); x.rotate(-0.34);
+    x.beginPath(); x.ellipse(0,0,6.6,4.6,0,0,6.283);
+    const hollow = (note.qBeats || note.beats) >= 2;
+    if(hollow){ x.strokeStyle="#171310"; x.lineWidth=1.7; x.stroke(); } else { x.fillStyle="#171310"; x.fill(); }
+    x.restore();
+    // stem
+    x.strokeStyle = "#171310"; x.lineWidth = 1.5;
+    const up = step < 4;
+    x.beginPath();
+    if(up){ x.moveTo(cx+6, cy); x.lineTo(cx+6, cy-32); } else { x.moveTo(cx-6, cy); x.lineTo(cx-6, cy+32); }
+    x.stroke();
+    if((note.qBeats||note.beats) < 1){
+      x.beginPath();
+      if(up){ x.moveTo(cx+6, cy-32); x.quadraticCurveTo(cx+16, cy-24, cx+11, cy-14); }
+      else { x.moveTo(cx-6, cy+32); x.quadraticCurveTo(cx+4, cy+24, cx-1, cy+14); }
+      x.lineWidth = 2.4; x.stroke();
+    }
+    if(sharp){
+      x.fillStyle = "#171310"; x.font = "15px 'Playfair Display', serif"; x.textAlign = "right";
+      x.fillText("♯", cx-9, cy+5);
+    }
+    x.fillStyle = "#938a7b"; x.font = "10px Karla, sans-serif"; x.textAlign = "center";
+    x.fillText(midiToName(note.midi), cx, topY + 4*gap + 48);
+  }
+  if(notes.length > n){
+    x.fillStyle = "#938a7b"; x.font = "italic 12px 'Playfair Display', serif"; x.textAlign = "right";
+    x.fillText("+"+(notes.length-n)+" more", right, topY - 26);
+  }
+}
+function drawRoll(){
+  const { x, W, H } = fit($("roll"), 210);
+  x.fillStyle = "#fdfbf4"; x.fillRect(0,0,W,H);
+  if(!frames.length){ return; }
+  const lo = 48, hi = 84;
+  const y = m => H - ((m-lo)/(hi-lo))*H;
+  x.strokeStyle = "#ece3cf"; x.lineWidth = 1;
+  for(let m=lo; m<=hi; m++){
+    if(SHARP_PC[((m%12)+12)%12]){ x.fillStyle = "#f4eddc"; x.fillRect(0, y(m+0.5), W, (H/(hi-lo))); }
+    if(m%12 === 0){ x.beginPath(); x.moveTo(0,y(m)+0.5); x.lineTo(W,y(m)+0.5); x.stroke();
+      x.fillStyle="#938a7b"; x.font="9px Karla"; x.textAlign="left"; x.fillText(midiToName(m), 4, y(m)-3); }
+  }
+  const T = duration || 1;
+  // the raw per-frame pitch track, in red
+  x.strokeStyle = "rgba(176,42,34,.55)"; x.lineWidth = 1.4;
+  x.beginPath();
+  let started = false;
+  frames.forEach(f => {
+    if(!f.hz || f.conf < 0.35){ started = false; return; }
+    const px = f.t/T*W, py = y(hzToMidi(f.hz));
+    started ? x.lineTo(px,py) : x.moveTo(px,py);
+    started = true;
+  });
+  x.stroke();
+  // the notes the segmenter settled on
+  notes.forEach(n => {
+    const x0 = n.start/T*W, x1 = n.end/T*W, yy = y(n.midi);
+    x.fillStyle = "rgba(44,79,124,.82)";
+    x.fillRect(x0, yy - H/(hi-lo)/2, Math.max(3, x1-x0), H/(hi-lo));
+  });
+}
+function drawTuner(){
+  const { x, W, H } = fit($("tuner"), 76);
+  x.fillStyle = "#fdfbf4"; x.fillRect(0,0,W,H);
+  const mid = W/2;
+  x.strokeStyle = "#ddd3bd"; x.lineWidth = 1;
+  for(let c=-50;c<=50;c+=10){
+    const px = mid + c/50*(W/2-20);
+    const tall = c%50===0 ? 18 : (c%20===0 ? 12 : 7);
+    x.beginPath(); x.moveTo(px, H/2-tall); x.lineTo(px, H/2+tall); x.stroke();
+  }
+  x.strokeStyle = "#c4b699"; x.beginPath(); x.moveTo(20,H/2); x.lineTo(W-20,H/2); x.stroke();
+  x.fillStyle = "#938a7b"; x.font = "9px Karla"; x.textAlign="center";
+  x.fillText("−50", 20, H-6); x.fillText("0", mid, H-6); x.fillText("+50", W-20, H-6);
+  if(live.hz > 0){
+    const m = hzToMidi(live.hz), cents = (m - Math.round(m))*100;
+    const px = mid + Math.max(-50,Math.min(50,cents))/50*(W/2-20);
+    x.strokeStyle = Math.abs(cents) < 8 ? "#2f7d4f" : "#b02a22"; x.lineWidth = 2.6;
+    x.beginPath(); x.moveTo(px, 8); x.lineTo(px, H-20); x.stroke();
+    $("cents").textContent = (cents>0?"+":"")+cents.toFixed(0)+" cents";
+  } else $("cents").textContent = "—";
+}
+function draw(){ drawStave(); drawRoll(); drawTuner(); }
+function renderTable(){
+  const tb = $("ntable").querySelector("tbody");
+  tb.innerHTML = notes.slice(0,80).map((n,i) =>
+    '<tr><td class="c">'+(i+1)+'</td><td class="n">'+midiToName(n.midi)+'</td><td class="c">'+n.hz.toFixed(1)+
+    '</td><td class="c">'+(n.qBeats||n.beats).toFixed(2)+'</td></tr>').join("");
+  $("n-count").textContent = notes.length;
+  $("t-note").textContent = notes.length ? notes.length+" notes written" : "—";
+  $("p-note").textContent = frames.length ? frames.length+" frames · "+duration.toFixed(2)+" s" : "—";
+}
+
+/* ---------- studies: synthesised from a known list of notes ---------- */
+const STUDIES = {
+  "Ascending scale": { bpm:96, seq:[[60,1],[62,1],[64,1],[65,1],[67,1],[69,1],[71,1],[72,2]] },
+  "Ode to Joy":      { bpm:104, seq:[[64,1],[64,1],[65,1],[67,1],[67,1],[65,1],[64,1],[62,1],[60,1],[60,1],[62,1],[64,1],[64,1.5],[62,0.5],[62,2]] },
+  "Arpeggio study":  { bpm:112, seq:[[60,0.5],[64,0.5],[67,0.5],[72,0.5],[67,0.5],[64,0.5],[60,1],[62,0.5],[65,0.5],[69,0.5],[74,0.5],[69,0.5],[65,0.5],[62,1]] },
+  "Chromatic climb": { bpm:88, seq:[[60,0.5],[61,0.5],[62,0.5],[63,0.5],[64,0.5],[65,0.5],[66,0.5],[67,1.5]] },
+};
+let ac = null, current = null;
+function ensure(){ if(!ac) ac = new (window.AudioContext||window.webkitAudioContext)(); return ac; }
+async function renderStudy(name){
+  const st = STUDIES[name];
+  const sr = 44100, beat = 60/st.bpm;
+  const total = st.seq.reduce((a,[,b])=>a+b,0)*beat + 0.6;
+  const ctx = new OfflineAudioContext(1, Math.ceil(total*sr), sr);
+  let t = 0.15;
+  st.seq.forEach(([midi,beats]) => {
+    const dur = beats*beat*0.92;
+    const f = midiToHz(midi);
+    // a few harmonics, because a pure sine is an unrealistically easy target
+    [1,2,3,4].forEach((h,i) => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = "sine"; o.frequency.value = f*h;
+      const amp = 0.34/Math.pow(h,1.35);
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(amp, t+0.02);
+      g.gain.setValueAtTime(amp, t+dur-0.05);
+      g.gain.linearRampToValueAtTime(0, t+dur);
+      o.connect(g).connect(ctx.destination);
+      o.start(t); o.stop(t+dur+0.02);
+    });
+    t += beats*beat;
+  });
+  return { buffer: await ctx.startRendering(), truth: st.seq.map(s=>s[0]), bpm: st.bpm };
+}
+async function playStudy(){
+  ensure();
+  if(ac.state === "suspended") await ac.resume();
+  $("status").textContent = "rendering the study";
+  const name = $("tune").value;
+  const { buffer, bpm } = await renderStudy(name);
+  $("bpm").value = bpm; $("bpm-v").textContent = bpm;
+  current = buffer;
+  const src = ac.createBufferSource(); src.buffer = buffer; src.connect(ac.destination); src.start();
+  $("status").textContent = "listening";
+  analyse(buffer.getChannelData(0), buffer.sampleRate);
+  $("status").textContent = notes.length + " notes written";
+}
+
+/* ---------- live microphone ---------- */
+let live = { hz:0, conf:0 }, micStream = null, raf = 0;
+async function startMic(){
+  ensure();
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:false, noiseSuppression:false, autoGainControl:false } });
+  } catch(e){ $("status").textContent = "microphone not available in this browser"; return; }
+  if(ac.state === "suspended") await ac.resume();
+  const src = ac.createMediaStreamSource(micStream);
+  const an = ac.createAnalyser(); an.fftSize = WIN;
+  src.connect(an);
+  const buf = new Float32Array(WIN);
+  const rec = [];
+  const t0 = ac.currentTime;
+  $("mic").textContent = "Stop"; $("mic").classList.add("rec");
+  $("status").textContent = "listening to the microphone";
+  const step = () => {
+    raf = requestAnimationFrame(step);
+    an.getFloatTimeDomainData(buf);
+    let rms = 0; for(let i=0;i<WIN;i++) rms += buf[i]*buf[i];
+    rms = Math.sqrt(rms/WIN);
+    if(rms > Math.pow(10, (+$("gate").value)/20)){
+      const r = yin(buf, ac.sampleRate, +$("th").value);
+      live = r;
+      if(r.hz){
+        $("r-note").textContent = midiToName(Math.round(hzToMidi(r.hz)));
+        $("r-hz").innerHTML = r.hz.toFixed(1)+'<small> Hz</small>';
+        $("r-cf").textContent = (r.conf*100).toFixed(0)+"%";
+      }
+    } else { live = { hz:0, conf:0 }; }
+    frames.push({ t: ac.currentTime - t0, hz: live.hz, conf: live.conf, rms });
+    if(frames.length > 900) frames.shift();
+    duration = Math.max(1, ac.currentTime - t0);
+    segment();
+  };
+  frames = [];
+  step();
+}
+function stopMic(){
+  cancelAnimationFrame(raf);
+  if(micStream) micStream.getTracks().forEach(t => t.stop());
+  micStream = null;
+  $("mic").textContent = "Use microphone"; $("mic").classList.remove("rec");
+  $("status").textContent = notes.length+" notes written";
+}
+
+/* ---------- wiring ---------- */
+const ts = $("tune");
+Object.keys(STUDIES).forEach(k => { const o = document.createElement("option"); o.value = o.textContent = k; ts.appendChild(o); });
+$("play").onclick = playStudy;
+$("mic").onclick = () => micStream ? stopMic() : startMic();
+$("pick").onclick = () => $("file").click();
+$("file").onchange = async e => {
+  const f = e.target.files[0]; if(!f) return;
+  ensure();
+  $("status").textContent = "decoding";
+  try {
+    const buf = await ac.decodeAudioData(await f.arrayBuffer());
+    analyse(buf.getChannelData(0), buf.sampleRate);
+    $("status").textContent = notes.length+" notes written";
+  } catch(err){ $("status").textContent = "could not decode that file"; }
+};
+$("clear").onclick = () => { frames = []; notes = []; duration = 0; draw(); renderTable(); $("status").textContent = "ready"; };
+$("th").oninput = e => { $("th-v").textContent = (+e.target.value).toFixed(2); if(current) analyse(current.getChannelData(0), current.sampleRate); };
+$("gate").oninput = e => { $("g-v").textContent = e.target.value+" dB"; if(current) analyse(current.getChannelData(0), current.sampleRate); };
+$("bpm").oninput = e => { $("bpm-v").textContent = e.target.value; quantise(); draw(); renderTable(); };
+$("quant").onchange = () => { quantise(); draw(); renderTable(); };
+window.addEventListener("resize", draw);
+draw();
+</script>
+</body>
+</html>
